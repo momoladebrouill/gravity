@@ -35,7 +35,7 @@ class Obej(pg.sprite.Sprite):  # Les météorites
         super().__init__()
         self.v = Vec2D(randrange(100), randrange(100))  # Son vecteur d'origine
         self.x = randrange(WIND)  # X d'origine
-        self.y = randrange(WIND/2)  # Y d'origine
+        self.y = randrange(int(WIND/2))  # Y d'origine
         self.isshow = False  # Es ce qu'on montre son vecteur ?
         self.g = Vec2D(0, 0)  # Vecteur gravitationel
         self.c = (randrange(255), 10, 10)  # Couleur principale
