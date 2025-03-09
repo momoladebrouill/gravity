@@ -1,8 +1,10 @@
 #include <SFML/Graphics.hpp>
 #include <cmath>
+#include <list>
 #define WIDTH 1920*3/4
 #define HEIGHT 1080*3/4
 #define GMb 10000000.0
+#define MAXINCELL 40
 
 class ParticleSystem : public sf::Drawable, public sf::Transformable{
 
@@ -24,9 +26,11 @@ public:
     }
 
 private:
+
     virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const{
         states.transform *= getTransform();
         states.texture = NULL;
+        drawTree(m_tree, target, states);
         target.draw(m_vertices, states);
     }
 
@@ -35,6 +39,28 @@ private:
         sf::Vector2f velocity;
         sf::Time lifetime;
     };
+
+
+    struct Node;
+
+    struct InNode {
+        Node* nw; // north west
+        Node* ne; // north east
+        Node* sw; // south west
+        Node* se; // south est
+    };
+
+    struct Node{
+        sf::Vector2f hg; // haut gauche
+        sf::Vector2f bd; // bas droite
+        float mass;
+        bool isLeaf;
+        union cont {
+            std::list<int> points; // on note l'index du point concerné
+            InNode noeud;
+        }content;
+    };
+
 
     void resetParticle(std::size_t index) {
         float angle = (std::rand() % 360) * 3.14f / 180.f;
@@ -45,6 +71,58 @@ private:
         m_vertices[index].position = m_emitter;
     }
 
+    Node* initTree(int n, sf::Vector2f hg, sf::Vector2f bd){
+        Node* current = (Node*) malloc(sizeof(Node));
+        current->isLeaf = n < MAXINCELL;
+
+        if(n < MAXINCELL){
+            // everything can fit in the leaf
+            current->hg = hg;
+            current->bd = bd;
+
+            current->mass = 0.0;
+            for(int i=0; i<n; i++){
+                int dx = (int) (bd.x - hg.x);
+                int dy = (int) (bd.y - hg.y);
+                current->content.points.push_front(sf::Vector2f(
+                            hg.x + (float) (std::rand() % dx), 
+                            hg.y + (float) (std::rand() % dy) 
+                            )
+                        );
+                current->mass += 1.0;
+            }
+        } else {
+            //split the remaining quantity in subdnodes
+            int subq = n/4; // sub quantity
+            current->hg = hg;
+            current->bd = bd;
+            sf::Vector2f north = sf::Vector2f((hg.x+bd.x)/2.f, hg.y);
+            sf::Vector2f west = sf::Vector2f(hg.x, (hg.y+bd.y)/2.f);
+            sf::Vector2f east = sf::Vector2f(bd.x, (hg.y+bd.y)/2.f);
+            sf::Vector2f south = sf::Vector2f((hg.x+bd.x)/2.f, bd.y);
+            sf::Vector2f center = sf::Vector2f((hg.x+bd.x)/2.f, (hg.y+bd.y)/2.f);
+
+            current->content.noeud.nw = initTree(subq, hg, center);
+            current->content.noeud.ne = initTree(subq, north, east);
+            current->content.noeud.sw = initTree(subq, west, south);
+            current->content.noeud.se = initTree(subq, center, bd);
+
+            current->mass = current->content.noeud.nw->mass 
+                + current->content.noeud.ne->mass 
+                + current->content.noeud.sw->mass 
+                + current->content.noeud.se->mass;   
+
+        }
+        return current;
+    } 
+
+    void drawTree(Node * current, sf::RenderTarget target, sf::RenderStates state){
+        if(current->isLeaf){
+            target.draw(current->content.points,target, state);
+        }else{
+            drawTree(current->content.ne,target, state);
+        }
+    }
 
 
 
@@ -68,25 +146,26 @@ private:
 
     }
 
-
+    Node* m_tree;
     std::vector<Particle> m_particles;
     sf::VertexArray m_vertices;
     sf::Time m_lifetime;
     sf::Vector2f m_emitter;
+    
 };
 
 
 int main(){
+    sf::Clock clock;
+
     sf::ContextSettings settings;
-    settings.antialiasingLevel = 8;
+    settings.antialiasingLevel = 0;
 
     sf::RenderWindow window(sf::VideoMode(WIDTH, HEIGHT), "SFML Particles", sf::Style::Default, settings);
     window.setFramerateLimit(60);
 
     ParticleSystem particles(1000);
-    sf::Clock clock;
 
-    // define a 120x50 rectangle
     sf::RectangleShape rectangle(sf::Vector2f(WIDTH,HEIGHT));
     rectangle.setFillColor(sf::Color(0,0,0,30));
 
